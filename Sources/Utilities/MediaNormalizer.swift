@@ -305,7 +305,8 @@ enum MediaNormalizer {
             name: JSONHelpers.string(authorRaw, keys: ["name"]).isEmpty ? nil : JSONHelpers.string(authorRaw, keys: ["name"]),
             title: nil,
             path: JSONHelpers.string(authorRaw, keys: ["path"]).isEmpty ? nil : JSONHelpers.string(authorRaw, keys: ["path"]),
-            year: nil
+            year: nil,
+            posterURL: nil
         )
         let bookRows = JSONHelpers.dictArray(raw["books"])
         let books = bookRows.map { b -> BookItem in

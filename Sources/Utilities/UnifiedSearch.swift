@@ -125,7 +125,7 @@ enum UnifiedSearch {
                     remote.append(contentsOf: rows)
                 }
             }
-            if scopeIncludesMusicRemote(scope, caps) {
+            if scopeIncludesMusicRemote(scope, caps: caps) {
                 for type in [SearchMediaType.music, .musicAlbum, .musicTrack] {
                     if let rows = try? await api.search(query: query, type: type) {
                         remote.append(contentsOf: rows)
