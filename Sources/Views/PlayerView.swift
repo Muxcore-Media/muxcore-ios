@@ -54,14 +54,14 @@ struct PlayerView: View {
                 throw APIError.badResponse("Invalid stream URL")
             }
             let avPlayer = AVPlayer(url: url)
-            let prefs = appState.userdata.preferences
-            if prefs.playback.rememberPosition, let prog = appState.userdata.getProgress(id: item.id) {
+            let prefs = await appState.userdata.preferences
+            if prefs.playback.rememberPosition, let prog = await appState.userdata.getProgress(id: item.id) {
                 let seek = prog.positionSec + Double(prefs.playback.skipIntroSec)
                 if seek > 0 && prog.watched != true {
-                    avPlayer.seek(to: CMTime(seconds: seek, preferredTimescale: 600))
+                    await avPlayer.seek(to: CMTime(seconds: seek, preferredTimescale: 600))
                 }
             } else if prefs.playback.skipIntroSec > 0 {
-                avPlayer.seek(to: CMTime(seconds: Double(prefs.playback.skipIntroSec), preferredTimescale: 600))
+                await avPlayer.seek(to: CMTime(seconds: Double(prefs.playback.skipIntroSec), preferredTimescale: 600))
             }
             player = avPlayer
             avPlayer.play()

@@ -6,8 +6,8 @@ enum NextUpResolver {
         fetchShow: (String) async throws -> TVShow,
         limit: Int = 12
     ) async -> [NextUpEntry] {
-        let progress = userdata.listProgress()
-        let continueIds = Set(userdata.continueWatching(limit: 100).map(\.id))
+        let progress = await userdata.listProgress()
+        let continueIds = Set(await userdata.continueWatching(limit: 100).map(\.id))
         var out: [NextUpEntry] = []
         var seen = Set<String>()
         var showCache: [String: TVShow?] = [:]

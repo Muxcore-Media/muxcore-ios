@@ -46,7 +46,7 @@ struct CollectionsView: View {
                         Text("Box sets").font(.headline)
                         ForEach(serverCols) { col in
                             Button {
-                                Task { await openCollection(col.id) }
+                                Task { await openCollection(id: col.id) }
                             } label: {
                                 HStack {
                                     Text(col.name)
