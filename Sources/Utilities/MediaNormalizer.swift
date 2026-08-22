@@ -247,7 +247,7 @@ enum MediaNormalizer {
         let rows = JSONHelpers.dictArray(raw["items"])
         let items = rows.map { row -> LibraryRow in
             let poster = JSONHelpers.string(row, keys: ["poster_url", "posterURL", "poster"])
-            LibraryRow(
+            return LibraryRow(
                 id: JSONHelpers.string(row, keys: ["id", "name", "title"]),
                 name: JSONHelpers.string(row, keys: ["name"]).isEmpty ? nil : JSONHelpers.string(row, keys: ["name"]),
                 title: JSONHelpers.string(row, keys: ["title"]).isEmpty ? nil : JSONHelpers.string(row, keys: ["title"]),
