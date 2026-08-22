@@ -1,0 +1,59 @@
+name: iOS IPA
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ipa:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for device (unsigned)
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project MuxCore.xcodeproj \
+            -scheme MuxCore \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP="$(find DerivedData -name 'MuxCore.app' -path '*Release-iphoneos*' -type d | head -1)"
+          if [ -z "$APP" ]; then
+            echo "MuxCore.app not found in DerivedData"
+            find DerivedData -name '*.app' || true
+            exit 1
+          fi
+          rm -rf Payload MuxCore.ipa
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qr MuxCore-unsigned.ipa Payload
+          ls -lh MuxCore-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MuxCore-ipa
+          path: MuxCore-unsigned.ipa
+          if-no-files-found: error
