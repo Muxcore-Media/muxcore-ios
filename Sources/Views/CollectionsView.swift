@@ -99,7 +99,7 @@ struct CollectionsView: View {
             let d = try await appState.api.getCollection(id: id)
             detail = (d.name, d.movies)
         } catch {
-            error = error.localizedDescription
+            self.error = error.localizedDescription
         }
     }
 }

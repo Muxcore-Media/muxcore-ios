@@ -1,5 +1,16 @@
 import SwiftUI
 
+struct SettingsRootView: View {
+    var body: some View {
+        List(SettingsTab.allCases) { tab in
+            NavigationLink(value: AppRoute.settings(tab)) {
+                Text(tab.label)
+            }
+        }
+        .navigationTitle("Settings")
+    }
+}
+
 struct SettingsDetailView: View {
     @EnvironmentObject private var appState: AppState
     let tab: SettingsTab

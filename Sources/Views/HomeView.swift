@@ -107,7 +107,7 @@ struct HomeView: View {
         loading = true
         error = nil
         await appState.userdata.pullFromServer()
-        progress = appState.userdata.continueWatching(16)
+        progress = appState.userdata.continueWatching(limit: 16)
         favorites = Array(appState.userdata.listFavorites().prefix(16))
         nextUp = await NextUpResolver.resolve(userdata: appState.userdata, fetchShow: { try await appState.api.getTVShow(id: $0) }, limit: 16)
         do {

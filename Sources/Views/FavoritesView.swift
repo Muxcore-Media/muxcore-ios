@@ -3,29 +3,43 @@ import SwiftUI
 struct FavoritesView: View {
     @EnvironmentObject private var appState: AppState
 
+    private var favorites: [FavoriteEntry] {
+        appState.userdata.listFavorites()
+    }
+
     var body: some View {
-        let items = appState.userdata.listFavorites()
-        ScrollView {
-            if items.isEmpty {
-                ContentUnavailableView("No favorites", systemImage: "heart", description: Text("Use the star on a detail page."))
-                    .padding()
+        Group {
+            if favorites.isEmpty {
+                ContentUnavailableView(
+                    "No favorites",
+                    systemImage: "heart",
+                    description: Text("Use the star on a detail page.")
+                )
             } else {
-                PosterGrid {
-                    ForEach(items, id: \.id) { fav in
-                        NavigationLink(value: fav.kind == .tv ? AppRoute.tvShow(fav.id) : AppRoute.movie(fav.id)) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                PosterImage(urlString: fav.posterURL ?? "", cornerRadius: 10)
-                                    .frame(height: 160)
-                                Text(fav.title)
-                                    .font(.caption.weight(.semibold))
-                                    .lineLimit(2)
-                            }
+                ScrollView {
+                    PosterGrid {
+                        ForEach(favorites, id: \.id) { fav in
+                            favoriteLink(for: fav)
                         }
                     }
+                    .padding()
                 }
-                .padding()
             }
         }
         .navigationTitle("Favorites")
+    }
+
+    @ViewBuilder
+    private func favoriteLink(for fav: FavoriteEntry) -> some View {
+        let route: AppRoute = fav.kind == .tv ? .tvShow(fav.id) : .movie(fav.id)
+        NavigationLink(value: route) {
+            VStack(alignment: .leading, spacing: 6) {
+                PosterImage(urlString: fav.posterURL ?? "", cornerRadius: 10)
+                    .frame(height: 160)
+                Text(fav.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(2)
+            }
+        }
     }
 }

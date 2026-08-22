@@ -22,7 +22,7 @@ enum APIError: LocalizedError {
 
 final class APIClient {
     private let session: URLSession
-    private var serverBase: URL?
+    var serverBase: URL?
 
     init() {
         let config = URLSessionConfiguration.default

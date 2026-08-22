@@ -7,7 +7,7 @@ struct QueueView: View {
     private var displayQueue: [QueueItem] {
         let queue = appState.userdata.listQueue()
         if !queue.isEmpty { return queue }
-        let fromProgress = appState.userdata.continueWatching(20).compactMap { p -> QueueItem? in
+        let fromProgress = appState.userdata.continueWatching(limit: 20).compactMap { p -> QueueItem? in
             guard let href = PlayHref.progressPlayer(p) else { return nil }
             return QueueItem(id: p.id, kind: p.kind, title: p.title, href: href, streamURL: p.streamURL, posterURL: p.posterURL)
         }

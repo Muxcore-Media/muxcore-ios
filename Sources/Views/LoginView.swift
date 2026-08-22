@@ -10,7 +10,7 @@ struct LoginView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "play.tv.fill")
                         .font(.system(size: 48))
-                        .foregroundStyle(.accent)
+                        .foregroundStyle(Color.accentColor)
                     Text("MuxCore")
                         .font(.largeTitle.bold())
                     Text("Sign in to your media server")

@@ -69,7 +69,7 @@ struct PosterGrid<Content: View>: View {
     let columns: [GridItem]
     @ViewBuilder let content: () -> Content
 
-    init(columns: Int = 3, @ViewBuilder content: () -> Content) {
+    init(columns: Int = 3, @ViewBuilder content: @escaping () -> Content) {
         self.columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: columns)
         self.content = content
     }

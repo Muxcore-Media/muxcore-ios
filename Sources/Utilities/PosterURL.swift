@@ -1,7 +1,7 @@
 import Foundation
 
 enum PosterURL {
-    static func resolve(_ path: String, kind: MediaKind = .movie, serverBase: URL?) -> String {
+    static func resolve(_ path: String, kind: PosterAssetKind = .movie, serverBase: URL?) -> String {
         guard !path.isEmpty else { return "" }
         if path.hasPrefix("http://") || path.hasPrefix("https://") || path.hasPrefix("/images/") {
             return absolute(path, serverBase: serverBase)
@@ -25,7 +25,7 @@ enum PosterURL {
     }
 }
 
-enum MediaKind {
+enum PosterAssetKind {
     case movie
     case tv
 }
