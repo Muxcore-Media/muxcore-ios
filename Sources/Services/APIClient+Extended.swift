@@ -121,6 +121,16 @@ extension APIClient {
         return MediaNormalizer.musicArtist(from: raw, serverBase: serverBase)
     }
 
+    func getTrackLyrics(trackId: String) async throws -> TrackLyrics {
+        let raw = try await getJSON(path: "/api/music/tracks/\(trackId)/lyrics") as? [String: Any] ?? [:]
+        return TrackLyrics(
+            found: raw["found"] as? Bool ?? false,
+            text: JSONHelpers.string(raw, keys: ["text"]),
+            title: JSONHelpers.string(raw, keys: ["title"]).isEmpty ? nil : JSONHelpers.string(raw, keys: ["title"]),
+            format: JSONHelpers.string(raw, keys: ["format"]).isEmpty ? nil : JSONHelpers.string(raw, keys: ["format"])
+        )
+    }
+
     func getBookAuthor(id: String) async throws -> BookAuthorDetail {
         let raw = try await getJSON(path: "/api/books/\(id)") as? [String: Any] ?? [:]
         return MediaNormalizer.bookAuthor(from: raw, serverBase: serverBase)

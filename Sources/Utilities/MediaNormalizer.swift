@@ -246,12 +246,14 @@ enum MediaNormalizer {
     static func libraryList(from raw: [String: Any]) -> LibraryListResponse {
         let rows = JSONHelpers.dictArray(raw["items"])
         let items = rows.map { row -> LibraryRow in
+            let poster = JSONHelpers.string(row, keys: ["poster_url", "posterURL", "poster"])
             LibraryRow(
                 id: JSONHelpers.string(row, keys: ["id", "name", "title"]),
                 name: JSONHelpers.string(row, keys: ["name"]).isEmpty ? nil : JSONHelpers.string(row, keys: ["name"]),
                 title: JSONHelpers.string(row, keys: ["title"]).isEmpty ? nil : JSONHelpers.string(row, keys: ["title"]),
                 path: JSONHelpers.string(row, keys: ["path"]).isEmpty ? nil : JSONHelpers.string(row, keys: ["path"]),
-                year: JSONHelpers.optionalInt(row, keys: ["year"])
+                year: JSONHelpers.optionalInt(row, keys: ["year"]),
+                posterURL: poster.isEmpty ? nil : poster
             )
         }
         return LibraryListResponse(
@@ -272,7 +274,8 @@ enum MediaNormalizer {
             name: JSONHelpers.string(artistRaw, keys: ["name"]).isEmpty ? nil : JSONHelpers.string(artistRaw, keys: ["name"]),
             title: nil,
             path: JSONHelpers.string(artistRaw, keys: ["path"]).isEmpty ? nil : JSONHelpers.string(artistRaw, keys: ["path"]),
-            year: nil
+            year: nil,
+            posterURL: nil
         )
         let albumRows = JSONHelpers.dictArray(raw["albums"])
         let albums = albumRows.map { albumRaw -> MusicAlbum in

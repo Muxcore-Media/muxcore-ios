@@ -25,5 +25,6 @@ SwiftUI native client — **parity target: `media-ui-app`**. BFF is **mediauipro
 ## Known iOS gaps vs web
 
 - Custom video OSD (web `VideoPlayer.tsx`) — iOS uses `AVPlayer` + resume/skip-intro from prefs
-- Search scope picker — simplified library substring + remote discover
-- Music lyrics UI not implemented
+- Search scope picker matches web unified search filters
+- Music lyrics panel on artist track playback
+- Display theme (dark/light/system) applied via `preferredColorScheme`

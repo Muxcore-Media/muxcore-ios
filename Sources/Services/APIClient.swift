@@ -202,9 +202,13 @@ final class APIClient {
         return MediaNormalizer.tvShow(from: row, serverBase: serverBase)
     }
 
-    func search(query: String) async throws -> [SearchResult] {
+    func search(query: String, type: SearchMediaType? = nil) async throws -> [SearchResult] {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        let raw = try await getJSON(path: "/api/search?q=\(encoded)") as? [String: Any] ?? [:]
+        var path = "/api/search?q=\(encoded)"
+        if let type {
+            path += "&type=\(type.rawValue)"
+        }
+        let raw = try await getJSON(path: path) as? [String: Any] ?? [:]
         let rows = JSONHelpers.dictArray(raw["results"])
         return rows.compactMap { MediaNormalizer.searchResult(from: $0) }
     }

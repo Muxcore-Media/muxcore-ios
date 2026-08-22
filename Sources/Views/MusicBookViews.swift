@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 
 struct MusicView: View {
@@ -43,7 +44,9 @@ struct MusicArtistView: View {
     let artistID: String
     @State private var detail: MusicArtistDetail?
     @State private var loading = true
-    @State private var playerItem: PlayerItem?
+    @State private var playingTrackID: String?
+    @State private var lyrics: TrackLyrics?
+    @State private var lyricsLoading = false
 
     var body: some View {
         ScrollView {
@@ -53,19 +56,14 @@ struct MusicArtistView: View {
                     Text(detail.artist.name ?? "Artist").font(.title2.bold())
                     ForEach(detail.albums) { album in
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(album.title).font(.headline)
-                            ForEach(album.tracks) { track in
-                                HStack {
-                                    Text(track.title)
-                                    Spacer()
-                                    if let stream = track.streamURL {
-                                        Button {
-                                            playerItem = PlayerItem(id: track.id, title: track.title, streamPath: stream, posterURL: nil, kind: "music")
-                                        } label: {
-                                            Image(systemName: "play.circle")
-                                        }
-                                    }
+                            HStack {
+                                Text(album.title).font(.headline)
+                                if let year = album.year {
+                                    Text(String(year)).font(.subheadline).foregroundStyle(.secondary)
                                 }
+                            }
+                            ForEach(album.tracks) { track in
+                                trackRow(track, album: album)
                             }
                         }
                     }
@@ -74,12 +72,108 @@ struct MusicArtistView: View {
             }
         }
         .navigationTitle(detail?.artist.name ?? "Music")
-        .fullScreenCover(item: $playerItem) { PlayerView(item: $0) }
         .task {
             do { detail = try await appState.api.getMusicArtist(id: artistID) }
             catch {}
             loading = false
         }
+        .onChange(of: playingTrackID) { _, newID in
+            Task { await loadLyrics(for: newID) }
+        }
+    }
+
+    @ViewBuilder
+    private func trackRow(_ track: MusicTrack, album: MusicAlbum) -> some View {
+        let isPlaying = playingTrackID == track.id
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(track.title)
+                Spacer()
+                if let stream = track.streamURL {
+                    Button {
+                        playingTrackID = isPlaying ? nil : track.id
+                    } label: {
+                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.title2)
+                    }
+                } else {
+                    Text("Unavailable").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if isPlaying {
+                if let stream = track.streamURL, let url = appState.api.absoluteURL(path: stream) {
+                    InlineAudioPlayer(url: url)
+                } else {
+                    Text("This track isn't available to play yet.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                lyricsPanel(for: track)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func lyricsPanel(for track: MusicTrack) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("LYRICS")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            if lyricsLoading {
+                ProgressView()
+            } else if let lyrics, lyrics.found, !lyrics.text.isEmpty {
+                ScrollView {
+                    Text(lyrics.text)
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 200)
+            } else {
+                Text("Lyrics aren't available for this track yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func loadLyrics(for trackID: String?) async {
+        guard let trackID else {
+            lyrics = nil
+            lyricsLoading = false
+            return
+        }
+        lyricsLoading = true
+        lyrics = nil
+        do {
+            lyrics = try await appState.api.getTrackLyrics(trackId: trackID)
+        } catch {
+            lyrics = TrackLyrics(found: false, text: "", title: nil, format: nil)
+        }
+        lyricsLoading = false
+    }
+}
+
+private struct InlineAudioPlayer: View {
+    let url: URL
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .frame(height: 120)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .onAppear {
+                let avPlayer = AVPlayer(url: url)
+                player = avPlayer
+                avPlayer.play()
+            }
+            .onDisappear {
+                player?.pause()
+                player = nil
+            }
     }
 }
 

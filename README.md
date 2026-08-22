@@ -29,7 +29,7 @@ Native SwiftUI client for the MuxCore consumer stack. Targets **parity with `med
 - Full custom **Video OSD** (keyboard shortcuts, skip intro UI, subtitle picker overlay) — iOS uses system `VideoPlayer` + prefs for resume/skip-intro seek
 - Unified search **scope picker** (all/movies/tv/add) — library substring match + remote results
 - **Theme** prefs stored/synced but iOS uses system light/dark (no custom CSS theme engine)
-- Music **lyrics** panel not implemented (API exists on web)
+- Music **lyrics** panel on artist pages (inline with track playback)
 
 ## Open on Mac
 

@@ -8,9 +8,15 @@ final class AppState: ObservableObject {
     @Published var capabilities: Capabilities = .defaults
     @Published var lastError: String?
 
-    let api = APIClient()
-    lazy var userdata = UserDataStore(api: api)
+    let api: APIClient
+    let userdata: UserDataStore
     lazy var auth = AuthService(api: api)
+
+    init() {
+        let client = APIClient()
+        api = client
+        userdata = UserDataStore(api: client)
+    }
 
     func bootstrap() async {
         if let url = SessionStore.serverURL() {

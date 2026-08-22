@@ -3,11 +3,44 @@ import SwiftUI
 struct SearchView: View {
     @EnvironmentObject private var appState: AppState
     @State private var query = ""
-    @State private var results: [SearchResult] = []
-    @State private var libraryMovies: [Movie] = []
-    @State private var libraryTV: [TVShow] = []
+    @State private var scope: SearchScope = .all
+    @State private var libraryHits: [LibrarySearchHit] = []
+    @State private var remoteResults: [SearchResult] = []
     @State private var loading = false
     @State private var error: String?
+
+    private var scopeOptions: [SearchScope] {
+        UnifiedSearch.scopes(for: appState.capabilities)
+    }
+
+    private var canSearch: Bool {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+    }
+
+    private var remoteOnly: [SearchResult] {
+        UnifiedSearch.remoteNotInLibrary(library: libraryHits, remote: remoteResults)
+    }
+
+    private var groupedMovies: [Movie] {
+        libraryHits.compactMap { hit in
+            if case .movie(let m) = hit { return m }
+            return nil
+        }
+    }
+
+    private var groupedShows: [TVShow] {
+        libraryHits.compactMap { hit in
+            if case .tv(let s) = hit { return s }
+            return nil
+        }
+    }
+
+    private var groupedOther: [LibrarySearchHit] {
+        libraryHits.filter {
+            if case .other = $0 { return true }
+            return false
+        }
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -24,27 +57,79 @@ struct SearchView: View {
             }
             .padding(.horizontal)
 
-            if loading { LoadingStateView() }
-            else if let error { ErrorStateView(message: error) }
-            else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(scopeOptions) { option in
+                        Button {
+                            scope = option
+                            Task { await runSearch() }
+                        } label: {
+                            Text(option.label)
+                                .font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(scope == option ? Color.accentColor : Color(.secondarySystemBackground))
+                                .foregroundStyle(scope == option ? Color.black : Color.primary)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal)
+            }
+
+            if !canSearch {
+                Text("Enter at least two characters to search.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding()
+            } else if loading {
+                LoadingStateView()
+            } else if let error {
+                ErrorStateView(message: error)
+            } else {
                 List {
-                    if !libraryMovies.isEmpty {
-                        Section("In your library — Movies") {
-                            ForEach(libraryMovies) { m in
-                                NavigationLink(value: m) { Text(m.title) }
+                    if !groupedMovies.isEmpty {
+                        Section("Movies (\(groupedMovies.count))") {
+                            ForEach(groupedMovies) { movie in
+                                NavigationLink(value: movie) {
+                                    Text(movie.title)
+                                }
                             }
                         }
                     }
-                    if !libraryTV.isEmpty {
-                        Section("In your library — TV") {
-                            ForEach(libraryTV) { s in
-                                NavigationLink(value: s) { Text(s.title) }
+                    if !groupedShows.isEmpty {
+                        Section("TV Shows (\(groupedShows.count))") {
+                            ForEach(groupedShows) { show in
+                                NavigationLink(value: show) {
+                                    Text(show.title)
+                                }
                             }
                         }
                     }
-                    if !results.isEmpty {
-                        Section("Add from catalog") {
-                            ForEach(results, id: \.stableKey) { row in
+                    if !groupedOther.isEmpty {
+                        Section("Other libraries (\(groupedOther.count))") {
+                            ForEach(groupedOther) { hit in
+                                if case .other(_, let route, let title, let subtitle, let poster) = hit {
+                                    NavigationLink(value: route) {
+                                        HStack {
+                                            if let poster, !poster.isEmpty {
+                                                PosterImage(urlString: poster, cornerRadius: 4)
+                                                    .frame(width: 40, height: 60)
+                                            }
+                                            VStack(alignment: .leading) {
+                                                Text(title).font(.subheadline.weight(.semibold))
+                                                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !remoteOnly.isEmpty {
+                        Section("Add to your library") {
+                            ForEach(remoteOnly, id: \.stableKey) { row in
                                 NavigationLink(value: AppRoute.discover(row.mediaType, row.id)) {
                                     HStack {
                                         PosterImage(urlString: row.poster, cornerRadius: 4)
@@ -58,6 +143,10 @@ struct SearchView: View {
                             }
                         }
                     }
+                    if canSearch && libraryHits.isEmpty && remoteOnly.isEmpty {
+                        Text("No matches for “\(query)” in \(scope.label).")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .listStyle(.plain)
             }
@@ -67,25 +156,27 @@ struct SearchView: View {
 
     private func runSearch() async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 2 else { return }
+        guard trimmed.count >= 2 else {
+            libraryHits = []
+            remoteResults = []
+            error = nil
+            return
+        }
         loading = true
         error = nil
-        libraryMovies = []
-        libraryTV = []
         do {
-            results = try await appState.api.search(query: trimmed)
-            let lower = trimmed.lowercased()
-            if appState.capabilities.libraryEnabled("movies") {
-                let movies = try await appState.api.listMovies(page: 1, pageSize: 200)
-                libraryMovies = movies.items.filter { $0.title.lowercased().contains(lower) }.prefix(20).map { $0 }
-            }
-            if appState.capabilities.libraryEnabled("tv") {
-                let shows = try await appState.api.listTVShows(page: 1, pageSize: 200)
-                libraryTV = shows.items.filter { $0.title.lowercased().contains(lower) }.prefix(20).map { $0 }
-            }
+            let result = try await UnifiedSearch.run(
+                api: appState.api,
+                caps: appState.capabilities,
+                query: trimmed,
+                scope: scope
+            )
+            libraryHits = result.library
+            remoteResults = result.remote
         } catch {
             self.error = error.localizedDescription
-            results = []
+            libraryHits = []
+            remoteResults = []
         }
         loading = false
     }

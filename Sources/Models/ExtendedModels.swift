@@ -36,6 +36,7 @@ struct LibraryRow: Identifiable, Hashable {
     var title: String?
     var path: String?
     var year: Int?
+    var posterURL: String?
 }
 
 struct LibraryListResponse {
@@ -46,6 +47,13 @@ struct LibraryListResponse {
     var available: Bool
     var comingSoon: Bool
     var message: String?
+}
+
+struct TrackLyrics: Hashable {
+    var found: Bool
+    var text: String
+    var title: String?
+    var format: String?
 }
 
 struct MusicTrack: Identifiable, Hashable {
