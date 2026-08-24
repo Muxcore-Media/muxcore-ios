@@ -20,6 +20,7 @@ let package = Package(
                 "Utilities/PosterURL.swift",
                 "Utilities/MediaNormalizer.swift",
                 "Utilities/IntExtensions.swift",
+                "Utilities/WebVTTParser.swift",
             ]
         ),
         .testTarget(

@@ -11,25 +11,23 @@ Native SwiftUI client for the MuxCore consumer stack. Targets **parity with `med
 | Quick Connect approve | Yes |
 | Home (continue watching, next up, favorites, recommended, in-progress banner) | Yes |
 | Movies / TV browse + detail | Yes |
-| Search (library + remote discover) | Yes |
+| Search (library + remote discover + scope picker) | Yes |
 | Discover detail + request | Yes |
 | Favorites, Queue, Playlists | Yes |
 | In progress (requests + non-watchable library) | Yes |
 | Collections, Studios, Upcoming | Yes |
-| Music, Books, Comics, Audiobooks | Yes |
+| Music, Books, Comics, Audiobooks (+ lyrics on artist tracks) | Yes |
 | Home videos, Music videos, Mixed | Yes |
 | Live TV (guide, recordings, timers) | Yes |
 | Userdata sync (`/api/userdata` pull/push) | Yes |
 | Settings (profile, display, home, playback, subtitles, controls) | Yes |
 | Playback resolve + AVPlayer + resume position | Yes |
+| Custom Video OSD (skip intro, subtitle picker, scrubber) | Yes |
 | Jellyfin deep-link on detail | Yes |
 
 ### Intentional gaps vs web
 
-- Full custom **Video OSD** (keyboard shortcuts, skip intro UI, subtitle picker overlay) — iOS uses system `VideoPlayer` + prefs for resume/skip-intro seek
-- Unified search **scope picker** (all/movies/tv/add) — library substring match + remote results
-- **Theme** prefs stored/synced but iOS uses system light/dark (no custom CSS theme engine)
-- Music **lyrics** panel on artist pages (inline with track playback)
+- External keyboard shortcuts on iOS (space/arrow) only when **Controls → keyboard shortcuts** is enabled and a hardware keyboard is attached
 
 ## Open on Mac
 
