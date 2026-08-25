@@ -3,6 +3,7 @@
 pkgs.mkShell {
   buildInputs = with pkgs; [
     swift
+  ] ++ lib.optionals stdenv.isDarwin [
     xcodegen
   ];
 
