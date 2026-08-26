@@ -1,6 +1,7 @@
 .DS_Store
 *.xcodeproj
 *.xcworkspace
+MuxCore-Info.plist
 xcuserdata/
 .build/
 .swiftpm/

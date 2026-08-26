@@ -27,8 +27,10 @@ targets:
     entitlements:
       path: MuxCore.entitlements
     info:
+      path: MuxCore-Info.plist
       properties:
         CFBundleURLTypes:
-          - CFBundleURLName: systems.zem.muxcore.auth
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: systems.zem.muxcore.auth
             CFBundleURLSchemes:
               - muxcore
