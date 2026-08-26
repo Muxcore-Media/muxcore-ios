@@ -80,12 +80,38 @@ final class APIClient {
     }
 
     func establishSession(from callbackURL: URL) async throws -> String {
-        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
-              !code.isEmpty
-        else {
+        guard let serverHost = serverBase?.host else {
+            throw APIError.missingServer
+        }
+        guard let code = AuthCallback.authCallbackCode(from: callbackURL, serverHost: serverHost) else {
             throw APIError.badResponse("Missing auth code")
         }
+        if AuthCallback.isMuxcoreAuthDeepLink(callbackURL) {
+            let result = try await establishSessionFromMobileCode(code)
+            SessionStore.saveSession(cookie: result.token, username: result.username)
+            if let base = serverBase {
+                syncSessionCookie(result.token, serverBase: base)
+            }
+            return result.token
+        }
+        return try await establishSessionFromAuthCode(code)
+    }
+
+    func establishSessionFromMobileCode(_ code: String) async throws -> (token: String, username: String?) {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw APIError.badResponse("Missing auth code")
+        }
+        let body = try JSONSerialization.data(withJSONObject: ["code": trimmed])
+        let raw = try await getJSON(path: "/api/mobile/session", method: "POST", body: body) as? [String: Any] ?? [:]
+        guard let token = raw["session_token"] as? String, !token.isEmpty else {
+            throw APIError.badResponse("No session token returned")
+        }
+        let username = raw["username"] as? String
+        return (token, username)
+    }
+
+    private func establishSessionFromAuthCode(_ code: String) async throws -> String {
         let path = "/auth/callback?code=\(code)"
         guard let url = absoluteURL(path: path) else { throw APIError.missingServer }
         var request = URLRequest(url: url)

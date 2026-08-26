@@ -26,3 +26,9 @@ targets:
       TARGETED_DEVICE_FAMILY: "1,2"
     entitlements:
       path: MuxCore.entitlements
+    info:
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: systems.zem.muxcore.auth
+            CFBundleURLSchemes:
+              - muxcore

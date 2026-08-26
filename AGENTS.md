@@ -8,6 +8,10 @@ SwiftUI native client — **parity target: `media-ui-app`**. BFF is **mediauipro
 - `xcodegen generate` then open `MuxCore.xcodeproj`
 - Default server: `https://mux.zem.systems`
 
+## Auth (native)
+
+Login uses BFF mobile auth: `GET /api/mobile/auth/login` → auth-local → `muxcore://auth/callback?code=…` → `POST /api/mobile/session`. URL scheme `muxcore` is registered in `project.yml`; no Associated Domains / `webcredentials` entitlements required.
+
 ## Architecture
 
 - `APIClient` + `APIClient+Extended` — all BFF endpoints

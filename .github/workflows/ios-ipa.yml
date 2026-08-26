@@ -16,6 +16,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Swift package tests
+        run: swift test
+
       - name: Install XcodeGen
         run: brew install xcodegen
 

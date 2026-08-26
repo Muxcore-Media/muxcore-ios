@@ -13,15 +13,9 @@ final class AuthService: NSObject {
 
     func login(serverURL: URL) async throws {
         api.setServerBase(serverURL)
-        let loginURL = serverURL.appendingPathComponent("login")
-        guard let host = serverURL.host else {
-            throw APIError.badResponse("Invalid server URL")
-        }
+        let loginURL = AuthCallback.mobileAuthLoginURL(serverBase: serverURL)
 
-        let callbackURL = try await startWebAuth(
-            url: loginURL,
-            host: host
-        )
+        let callbackURL = try await startWebAuth(url: loginURL)
         _ = try await api.establishSession(from: callbackURL)
     }
 
@@ -29,11 +23,11 @@ final class AuthService: NSObject {
         SessionStore.clearSession()
     }
 
-    private func startWebAuth(url: URL, host: String) async throws -> URL {
+    private func startWebAuth(url: URL) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(
                 url: url,
-                callback: .https(host: host, path: "/auth/callback")
+                callback: .customScheme(AuthCallback.customScheme)
             ) { callbackURL, error in
                 if let error {
                     continuation.resume(throwing: error)

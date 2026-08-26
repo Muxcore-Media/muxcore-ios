@@ -6,7 +6,7 @@ Native SwiftUI client for the MuxCore consumer stack. Targets **parity with `med
 
 | Area | iOS |
 |------|-----|
-| Auth (web login + session cookie) | Yes |
+| Auth (mobile deep link + session token) | Yes |
 | Forgot password request | Yes |
 | Quick Connect approve | Yes |
 | Home (continue watching, next up, favorites, recommended, in-progress banner) | Yes |
@@ -38,6 +38,8 @@ open MuxCore.xcodeproj
 ```
 
 Default server: `https://mux.zem.systems`
+
+Native sign-in opens the server web login via `/api/mobile/auth/login` and returns through the `muxcore://auth/callback` deep link (no Associated Domains setup).
 
 ## Linux tests (normalizers)
 
