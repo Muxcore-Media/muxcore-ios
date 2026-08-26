@@ -16,6 +16,7 @@ let package = Package(
             path: "Sources",
             sources: [
                 "Models/MediaModels.swift",
+                "Models/ExtendedModels.swift",
                 "Utilities/AuthCallback.swift",
                 "Utilities/JSONHelpers.swift",
                 "Utilities/PosterURL.swift",
