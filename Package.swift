@@ -18,6 +18,7 @@ let package = Package(
                 "Models/MediaModels.swift",
                 "Models/ExtendedModels.swift",
                 "Utilities/AuthCallback.swift",
+                "Utilities/ServerURL.swift",
                 "Utilities/JSONHelpers.swift",
                 "Utilities/PosterURL.swift",
                 "Utilities/MediaNormalizer.swift",

@@ -62,7 +62,7 @@ struct LoginView: View {
                         .font(.caption)
                 }
 
-                Text("Uses your server’s web login (auth-local). Session cookie is stored on device.")
+                Text("Use your media server URL (https://mux.zem.systems), not auth.zem.systems. Sign-in opens the web login and returns to the app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

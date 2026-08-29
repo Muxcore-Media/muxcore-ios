@@ -40,6 +40,10 @@ final class AppState: ObservableObject {
             lastError = "Enter a valid URL (e.g. https://mux.zem.systems)"
             return
         }
+        if let message = ServerURL.validationError(for: url) {
+            lastError = message
+            return
+        }
         serverURLString = url.absoluteString
         api.setServerBase(url)
         lastError = nil
@@ -48,6 +52,10 @@ final class AppState: ObservableObject {
     func login() async {
         guard let url = normalizedServerURL(serverURLString) else {
             lastError = "Enter a valid server URL first."
+            return
+        }
+        if let message = ServerURL.validationError(for: url) {
+            lastError = message
             return
         }
         lastError = nil
