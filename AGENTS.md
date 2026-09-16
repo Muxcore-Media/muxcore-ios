@@ -30,3 +30,5 @@ Login uses BFF mobile auth: `GET /api/mobile/auth/login` → auth-local → `mux
 
 - Custom video OSD (web `VideoPlayer.tsx`) — iOS uses `AVPlayer` + resume/skip-intro from prefs
 - Display theme (dark/light/system) applied via `preferredColorScheme`
+
+Open household/product work lives in workspace [`MASTER-ROADMAP.md`](../MASTER-ROADMAP.md) and umbrella GitHub Issues. Do not add `ROADMAP.md` / `TASKS.md` in this repo.
