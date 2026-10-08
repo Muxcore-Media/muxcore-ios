@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 @MainActor
@@ -16,6 +17,7 @@ final class AppState: ObservableObject {
         let client = APIClient()
         api = client
         userdata = UserDataStore(api: client)
+        if client.sessionToken != nil { userdata.activate(SessionStore.userdataScope()) }
     }
 
     func bootstrap() async {
@@ -30,7 +32,7 @@ final class AppState: ObservableObject {
         username = SessionStore.username()
         if isAuthenticated {
             await refreshCapabilities()
-            await userdata.pullFromServer()
+            if isAuthenticated { await userdata.pullFromServer() }
         }
     }
 
@@ -45,7 +47,9 @@ final class AppState: ObservableObject {
             return
         }
         serverURLString = url.absoluteString
+        if api.currentServerBase().flatMap(ServerURL.origin) != ServerURL.origin(url) { logout() }
         api.setServerBase(url)
+        SessionStore.saveServerURL(url)
         lastError = nil
     }
 
@@ -58,14 +62,19 @@ final class AppState: ObservableObject {
             lastError = message
             return
         }
+        logout()
         lastError = nil
+        let loginGeneration = api.sessionGeneration
         do {
             try await auth.login(serverURL: url)
             isAuthenticated = true
             username = SessionStore.username()
+            userdata.activate(SessionStore.userdataScope())
             await refreshCapabilities()
-            await userdata.pullFromServer()
+            if isAuthenticated { await userdata.pullFromServer() }
         } catch {
+            // A cancelled older login must not replace a newer account's UI state.
+            if api.sessionGeneration != loginGeneration, api.sessionToken != nil { return }
             isAuthenticated = false
             lastError = error.localizedDescription
         }
@@ -73,16 +82,21 @@ final class AppState: ObservableObject {
 
     func logout() {
         auth.logout()
+        userdata.activate(nil)
         isAuthenticated = false
         username = nil
         capabilities = .defaults
     }
 
     func refreshCapabilities() async {
+        let generation = api.sessionGeneration
         do {
-            capabilities = try await api.getCapabilities()
+            let result = try await api.getCapabilities()
+            guard generation == api.sessionGeneration else { return }
+            capabilities = result
             lastError = nil
         } catch {
+            guard generation == api.sessionGeneration else { return }
             if case APIError.unauthorized = error {
                 logout()
             }
