@@ -1,10 +1,12 @@
 import SwiftUI
 
 struct SettingsRootView: View {
+    @EnvironmentObject private var appState: AppState
     var body: some View {
-        List(SettingsTab.allCases) { tab in
-            NavigationLink(value: AppRoute.settings(tab)) {
-                Text(tab.label)
+        List {
+            UserDataSyncSection(userdata: appState.userdata)
+            ForEach(SettingsTab.allCases) { tab in
+                NavigationLink(value: AppRoute.settings(tab)) { Text(tab.label) }
             }
         }
         .navigationTitle("Settings")
@@ -139,5 +141,19 @@ struct SettingsDetailView: View {
             get: { appState.userdata.preferences.controls[keyPath: keyPath] },
             set: { v in appState.userdata.updatePreferences { $0.controls[keyPath: keyPath] = v } }
         )
+    }
+}
+
+private struct UserDataSyncSection: View {
+    @ObservedObject var userdata: UserDataStore
+
+    var body: some View {
+        Section("Data sync") {
+            Text(userdata.syncState.message)
+                .accessibilityIdentifier("userdata-sync-status")
+            if userdata.hasPendingChanges { Text("Some changes are still waiting to reach your server.") }
+            Button("Retry sync") { Task { await userdata.synchronize() } }
+                .disabled(userdata.isSyncing || userdata.scope == nil)
+        }
     }
 }

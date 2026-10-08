@@ -3,36 +3,34 @@ import Foundation
 extension APIClient {
     // MARK: - Userdata
 
-    struct UserdataBlob {
+    struct UserdataBlob: Codable {
         var progress: [String: ProgressEntry]?
         var favorites: [String: FavoriteEntry]?
         var prefs: UserPreferences?
         var playlists: [Playlist]?
         var queue: [QueueItem]?
+        // Keep preference keys owned by other clients when the server replaces this document.
+        var rawPrefs: Data?
+        var userID: String?
+        var tenantID: String?
     }
 
     func getUserdata() async throws -> UserdataBlob {
-        let raw = try await getJSON(path: "/api/userdata") as? [String: Any] ?? [:]
-        return parseUserdataBlob(raw)
+        try parseUserdataBlob(try await getJSON(path: "/api/userdata"))
     }
 
-    func putUserdata(
-        progress: [String: ProgressEntry],
-        favorites: [String: FavoriteEntry],
-        prefs: UserPreferences,
-        playlists: [Playlist],
-        queue: [QueueItem]
-    ) async throws -> UserdataBlob {
-        let body: [String: Any] = [
-            "progress": encodeMap(progress),
-            "favorites": encodeMap(favorites),
-            "prefs": encodePrefs(prefs),
-            "playlists": playlists.map { ["id": $0.id, "name": $0.name, "itemIds": $0.itemIds] },
-            "queue": queue.map { queueItemDict($0) },
-        ]
+    func putUserdata(_ blob: UserdataBlob) async throws -> UserdataBlob {
+        var body: [String: Any] = [:]
+        if let value = blob.progress { body["progress"] = try jsonObject(value) }
+        if let value = blob.favorites { body["favorites"] = try jsonObject(value) }
+        if let value = blob.prefs {
+            let preserved = try blob.rawPrefs.map { try JSONSerialization.jsonObject(with: $0) as? [String: Any] ?? [:] } ?? [:]
+            body["prefs"] = Self.overlay(preserved, try jsonObject(value) as? [String: Any] ?? [:])
+        }
+        if let value = blob.playlists { body["playlists"] = try jsonObject(value) }
+        if let value = blob.queue { body["queue"] = try jsonObject(value) }
         let data = try JSONSerialization.data(withJSONObject: body)
-        let raw = try await getJSON(path: "/api/userdata", method: "PUT", body: data) as? [String: Any] ?? [:]
-        return parseUserdataBlob(raw)
+        return try parseUserdataBlob(try await getJSON(path: "/api/userdata", method: "PUT", body: data))
     }
 
     // MARK: - Discover & requests
@@ -187,67 +185,50 @@ extension APIClient {
 
     // MARK: - Private encoding
 
-    private func parseUserdataBlob(_ raw: [String: Any]) -> UserdataBlob {
-        var progress: [String: ProgressEntry]? = nil
-        if let p = raw["progress"] as? [String: Any] {
-            progress = decodeMap(p, as: ProgressEntry.self)
+    private func parseUserdataBlob(_ value: Any) throws -> UserdataBlob {
+        guard let raw = value as? [String: Any],
+              let userID = raw["user_id"] as? String, !userID.isEmpty else {
+            throw APIError.decodingFailed
         }
-        var favorites: [String: FavoriteEntry]? = nil
-        if let f = raw["favorites"] as? [String: Any] {
-            favorites = decodeMap(f, as: FavoriteEntry.self)
+        if let tenant = raw["tenant_id"], !(tenant is String) { throw APIError.decodingFailed }
+        func field<T: Decodable>(_ key: String, _ type: T.Type) throws -> T? {
+            guard let value = raw[key] else { return nil }
+            guard JSONSerialization.isValidJSONObject(value) else { throw APIError.decodingFailed }
+            do {
+                return try JSONDecoder().decode(type, from: JSONSerialization.data(withJSONObject: value))
+            } catch { throw APIError.decodingFailed }
         }
-        var prefs: UserPreferences? = nil
-        if let p = raw["prefs"] {
-            prefs = decode(p, as: UserPreferences.self)
+        var prefs: UserPreferences?
+        var rawPrefs: Data?
+        if let value = raw["prefs"] {
+            guard let dictionary = value as? [String: Any] else { throw APIError.decodingFailed }
+            rawPrefs = try JSONSerialization.data(withJSONObject: dictionary)
+            let defaults = try jsonObject(UserPreferences.defaults) as? [String: Any] ?? [:]
+            let merged = Self.overlay(defaults, dictionary)
+            do { prefs = try JSONDecoder().decode(UserPreferences.self, from: JSONSerialization.data(withJSONObject: merged)) }
+            catch { throw APIError.decodingFailed }
         }
-        var playlists: [Playlist]? = nil
-        if let arr = raw["playlists"] as? [Any] {
-            playlists = arr.compactMap { decode($0, as: Playlist.self) }
-        }
-        var queue: [QueueItem]? = nil
-        if let arr = raw["queue"] as? [Any] {
-            queue = arr.compactMap { decode($0, as: QueueItem.self) }
-        }
-        return UserdataBlob(progress: progress, favorites: favorites, prefs: prefs, playlists: playlists, queue: queue)
+        return UserdataBlob(
+            progress: try field("progress", [String: ProgressEntry].self),
+            favorites: try field("favorites", [String: FavoriteEntry].self),
+            prefs: prefs,
+            playlists: try field("playlists", [Playlist].self),
+            queue: try field("queue", [QueueItem].self),
+            rawPrefs: rawPrefs, userID: userID, tenantID: raw["tenant_id"] as? String ?? ""
+        )
     }
 
-    private func encodeMap<T: Encodable>(_ map: [String: T]) -> [String: Any] {
-        var out: [String: Any] = [:]
-        for (key, value) in map {
-            if let data = try? JSONEncoder().encode(value),
-               let obj = try? JSONSerialization.jsonObject(with: data) {
-                out[key] = obj
-            }
+    private func jsonObject<T: Encodable>(_ value: T) throws -> Any {
+        try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
+    }
+
+    static func overlay(_ base: [String: Any], _ patch: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, value) in patch {
+            if let nested = value as? [String: Any], let original = result[key] as? [String: Any] {
+                result[key] = overlay(original, nested)
+            } else { result[key] = value }
         }
-        return out
-    }
-
-    private func encodePrefs(_ prefs: UserPreferences) -> [String: Any] {
-        guard let data = try? JSONEncoder().encode(prefs),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return [:] }
-        return obj
-    }
-
-    private func queueItemDict(_ item: QueueItem) -> [String: Any] {
-        var d: [String: Any] = ["id": item.id, "kind": item.kind.rawValue, "title": item.title, "href": item.href]
-        if let s = item.streamURL { d["stream_url"] = s }
-        if let p = item.posterURL { d["poster_url"] = p }
-        return d
-    }
-
-    private func decode<T: Decodable>(_ value: Any, as type: T.Type) -> T? {
-        guard let data = try? JSONSerialization.data(withJSONObject: value) else { return nil }
-        return try? JSONDecoder().decode(T.self, from: data)
-    }
-
-    private func decodeMap<T: Decodable>(_ dict: [String: Any], as type: T.Type) -> [String: T] {
-        var out: [String: T] = [:]
-        for (key, value) in dict {
-            if let decoded = decode(value, as: type) {
-                out[key] = decoded
-            }
-        }
-        return out
+        return result
     }
 }

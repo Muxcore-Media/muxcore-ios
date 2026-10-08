@@ -1,200 +1,127 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 enum APIError: LocalizedError {
     case missingServer
     case unauthorized
     case badResponse(String)
     case decodingFailed
+    case sessionChanged
 
     var errorDescription: String? {
         switch self {
-        case .missingServer:
-            return "Server URL is not configured."
-        case .unauthorized:
-            return "Session expired. Sign in again."
-        case .badResponse(let detail):
-            return detail
-        case .decodingFailed:
-            return "Could not read server response."
+        case .missingServer: return "Server URL is not configured."
+        case .unauthorized: return "Session expired. Sign in again."
+        case .badResponse(let detail): return detail
+        case .decodingFailed: return "Could not read server response."
+        case .sessionChanged: return "The signed-in session changed. Retry with the current account."
         }
     }
 }
 
+/// Native API traffic never follows redirects or uses the browser cookie jar.
+final class BFFRedirectPolicy: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
+@MainActor
 final class APIClient {
     private let session: URLSession
-    var serverBase: URL?
+    private(set) var serverBase: URL?
+    private(set) var sessionToken: String?
+    private(set) var sessionGeneration = UUID()
 
-    init() {
-        let config = URLSessionConfiguration.default
-        config.httpCookieAcceptPolicy = .always
-        config.httpShouldSetCookies = true
-        self.session = URLSession(configuration: config)
-        self.serverBase = SessionStore.serverURL()
-        if let base = serverBase, let cookie = SessionStore.sessionCookie() {
-            syncSessionCookie(cookie, serverBase: base)
-        }
+    init(serverBase: URL?, sessionToken: String? = nil,
+         configuration: URLSessionConfiguration = .ephemeral) {
+        let config = configuration.copy() as! URLSessionConfiguration
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        config.httpCookieAcceptPolicy = .never
+        config.timeoutIntervalForRequest = 30
+        self.session = URLSession(configuration: config, delegate: BFFRedirectPolicy(), delegateQueue: nil)
+        self.serverBase = serverBase
+        self.sessionToken = sessionToken
     }
 
     func setServerBase(_ url: URL) {
+        if ServerURL.origin(url) != serverBase.flatMap(ServerURL.origin) {
+            setSessionToken(nil)
+        }
         serverBase = url
-        SessionStore.saveServerURL(url)
     }
 
-    func currentServerBase() -> URL? {
-        serverBase
+    func setSessionToken(_ token: String?) {
+        sessionGeneration = UUID()
+        sessionToken = token
     }
 
+    func currentServerBase() -> URL? { serverBase }
+
+    // Media links may be external; JSON requests below enforce the BFF origin.
     func absoluteURL(path: String) -> URL? {
         guard let serverBase else { return nil }
-        if path.hasPrefix("http://") || path.hasPrefix("https://") {
-            return URL(string: path)
-        }
-        return URL(string: path, relativeTo: serverBase)
+        return URL(string: path, relativeTo: serverBase)?.absoluteURL
     }
 
-    func getJSON(path: String, method: String = "GET", body: Data? = nil) async throws -> Any {
-        guard let url = absoluteURL(path: path) else { throw APIError.missingServer }
+    func getJSON(path: String, method: String = "GET", body: Data? = nil,
+                 authenticated: Bool = true) async throws -> Any {
+        guard let base = serverBase, let origin = ServerURL.origin(base),
+              let url = absoluteURL(path: path) else { throw APIError.missingServer }
+        guard ServerURL.origin(url) == origin, url.user == nil, url.password == nil else {
+            throw APIError.badResponse("API request must stay on the configured server.")
+        }
+        let generation = sessionGeneration
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.httpShouldHandleCookies = false
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        if let cookie = SessionStore.sessionCookie() {
-            request.setValue("session=\(cookie)", forHTTPHeaderField: "Cookie")
+        if authenticated, let token = sessionToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw APIError.badResponse("Invalid response")
-        }
-        if http.statusCode == 401 {
-            throw APIError.unauthorized
-        }
+        guard generation == sessionGeneration else { throw APIError.sessionChanged }
+        guard let http = response as? HTTPURLResponse else { throw APIError.badResponse("Invalid response") }
+        if http.statusCode == 401 { throw APIError.unauthorized }
         guard (200 ... 299).contains(http.statusCode) else {
-            let detail = parseErrorBody(data) ?? "\(http.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: http.statusCode))"
-            throw APIError.badResponse(detail)
+            // Do not surface a server's arbitrary body (which can echo credentials).
+            throw APIError.badResponse("Server request failed (HTTP \(http.statusCode)).")
         }
-        return try JSONSerialization.jsonObject(with: data)
+        do { return try JSONSerialization.jsonObject(with: data) }
+        catch { throw APIError.decodingFailed }
     }
 
-    func establishSession(from callbackURL: URL) async throws -> String {
-        guard let serverHost = serverBase?.host else {
-            throw APIError.missingServer
-        }
-        guard let code = AuthCallback.authCallbackCode(from: callbackURL, serverHost: serverHost) else {
-            throw APIError.badResponse("Missing auth code")
-        }
-        if AuthCallback.isMuxcoreAuthDeepLink(callbackURL) {
-            let result = try await establishSessionFromMobileCode(code)
-            SessionStore.saveSession(cookie: result.token, username: result.username)
-            if let base = serverBase {
-                syncSessionCookie(result.token, serverBase: base)
-            }
-            return result.token
-        }
-        return try await establishSessionFromAuthCode(code)
-    }
-
-    func establishSessionFromMobileCode(_ code: String) async throws -> (token: String, username: String?) {
+    func exchangeMobileCode(_ code: String) async throws -> (token: String, userID: String, username: String?) {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw APIError.badResponse("Missing auth code")
-        }
+        guard !trimmed.isEmpty else { throw APIError.badResponse("Missing auth code") }
         let body = try JSONSerialization.data(withJSONObject: ["code": trimmed])
-        let raw = try await getJSON(path: "/api/mobile/session", method: "POST", body: body) as? [String: Any] ?? [:]
-        guard let token = raw["session_token"] as? String, !token.isEmpty else {
-            throw APIError.badResponse("No session token returned")
+        guard let raw = try await getJSON(path: "/api/mobile/session", method: "POST", body: body,
+                                         authenticated: false) as? [String: Any],
+              let token = raw["session_token"] as? String, !token.isEmpty,
+              let userID = raw["user_id"] as? String, !userID.isEmpty else {
+            throw APIError.decodingFailed
         }
-        let username = raw["username"] as? String
-        return (token, username)
+        return (token, userID, raw["username"] as? String)
     }
 
-    private func establishSessionFromAuthCode(_ code: String) async throws -> String {
-        let path = "/auth/callback?code=\(code)"
-        guard let url = absoluteURL(path: path) else { throw APIError.missingServer }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-
-        let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw APIError.badResponse("Invalid auth response")
+    func sessionScope() async throws -> UserDataScope {
+        guard let raw = try await getJSON(path: "/api/session") as? [String: Any],
+              let userID = raw["user_id"] as? String, !userID.isEmpty,
+              let base = serverBase, let origin = ServerURL.origin(base) else {
+            throw APIError.decodingFailed
         }
-        guard (200 ... 399).contains(http.statusCode) else {
-            throw APIError.badResponse("Auth callback failed (\(http.statusCode))")
-        }
-
-        if let cookie = extractSessionCookie(from: http, url: url) {
-            SessionStore.saveSession(cookie: cookie, username: nil)
-            if let base = serverBase {
-                syncSessionCookie(cookie, serverBase: base)
-            }
-            return cookie
-        }
-        if let stored = HTTPCookieStorage.shared.cookies(for: url)?.first(where: { $0.name == "session" }) {
-            SessionStore.saveSession(cookie: stored.value, username: nil)
-            return stored.value
-        }
-        throw APIError.badResponse("No session cookie returned")
-    }
-
-    func syncSessionCookie(_ value: String, serverBase: URL) {
-        guard let host = serverBase.host else { return }
-        var properties: [HTTPCookiePropertyKey: Any] = [
-            .domain: host,
-            .path: "/",
-            .name: "session",
-            .value: value,
-        ]
-        if serverBase.scheme == "https" {
-            properties[.secure] = "TRUE"
-        }
-        if let cookie = HTTPCookie(properties: properties) {
-            HTTPCookieStorage.shared.setCookie(cookie)
-        }
-    }
-
-    private func extractSessionCookie(from response: HTTPURLResponse, url: URL) -> String? {
-        if let header = response.value(forHTTPHeaderField: "Set-Cookie") {
-            return parseSessionValue(header)
-        }
-        let headers = response.allHeaderFields.reduce(into: [String: String]()) { result, pair in
-            if let key = pair.key as? String, let value = pair.value as? String {
-                result[key] = value
-            }
-        }
-        if !headers.isEmpty {
-            let cookies = HTTPCookie.cookies(withResponseHeaderFields: headers, for: url)
-            if let value = cookies.first(where: { $0.name == "session" })?.value {
-                return value
-            }
-        }
-        return nil
-    }
-
-    private func parseSessionValue(_ header: String) -> String? {
-        let parts = header.split(separator: ";")
-        for part in parts {
-            let trimmed = part.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("session=") {
-                return String(trimmed.dropFirst("session=".count))
-            }
-        }
-        return nil
-    }
-
-    private func parseErrorBody(_ data: Data) -> String? {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return String(data: data, encoding: .utf8)
-        }
-        if let error = object["error"] as? String {
-            if let code = object["code"] as? String {
-                return "\(error) (\(code))"
-            }
-            return error
-        }
-        return nil
+        if let tenant = raw["tenant_id"], !(tenant is String) { throw APIError.decodingFailed }
+        return UserDataScope(origin: origin, userID: userID, tenantID: raw["tenant_id"] as? String ?? "")
     }
 
     // MARK: - API surface (mirrors media-ui-app client)

@@ -13,13 +13,23 @@ final class AuthService: NSObject {
 
     func login(serverURL: URL) async throws {
         api.setServerBase(serverURL)
+        SessionStore.saveServerURL(serverURL)
+        let generation = api.sessionGeneration
         let loginURL = AuthCallback.mobileAuthLoginURL(serverBase: serverURL)
 
         let callbackURL = try await startWebAuth(url: loginURL)
+        guard api.sessionGeneration == generation,
+              api.currentServerBase().flatMap(ServerURL.origin) == ServerURL.origin(serverURL) else {
+            throw APIError.sessionChanged
+        }
         _ = try await api.establishSession(from: callbackURL)
     }
 
     func logout() {
+        webAuthSession?.cancel()
+        webAuthSession = nil
+        api.clearPlaybackSessionCookie()
+        api.setSessionToken(nil)
         SessionStore.clearSession()
     }
 
